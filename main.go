@@ -11,7 +11,6 @@ import (
 	"strconv"
 )
 
-// SOCKS protocol constants (RFC 1928 / RFC 1929).
 const (
 	socksVersion = 0x05
 
@@ -19,7 +18,7 @@ const (
 	methodUserPass     = 0x02
 	methodNoAcceptable = 0xFF
 
-	authVersion   = 0x01 // username/password sub-negotiation version
+	authVersion   = 0x01 
 	authSuccess   = 0x00
 	authFailure   = 0x01
 
@@ -89,8 +88,6 @@ func handleConnection(conn net.Conn) {
 	relay(conn, target)
 }
 
-// negotiateAuth reads the client greeting and writes the method selection.
-// It returns the method that was selected.
 func negotiateAuth(conn net.Conn) (byte, error) {
 	// VER, NMETHODS
 	header := make([]byte, 2)
@@ -107,7 +104,6 @@ func negotiateAuth(conn net.Conn) (byte, error) {
 		return 0, fmt.Errorf("read methods: %w", err)
 	}
 
-	// Decide which method we require based on whether auth is configured.
 	authRequired := os.Getenv("PROXY_USER") != ""
 	want := byte(methodNoAuth)
 	if authRequired {
@@ -123,17 +119,16 @@ func negotiateAuth(conn net.Conn) (byte, error) {
 		}
 	}
 
-	// No acceptable method offered.
 	if _, err := conn.Write([]byte{socksVersion, methodNoAcceptable}); err != nil {
 		return 0, fmt.Errorf("write no-acceptable-method: %w", err)
 	}
 	return 0, fmt.Errorf("no acceptable authentication method")
 }
 
-// authenticateUserPass performs the RFC 1929 username/password sub-negotiation.
-// Note: the sub-negotiation version is 0x01, not 0x05.
+
+
+
 func authenticateUserPass(conn net.Conn) error {
-	// VER, ULEN
 	header := make([]byte, 2)
 	if _, err := io.ReadFull(conn, header); err != nil {
 		return fmt.Errorf("read auth header: %w", err)
@@ -148,7 +143,6 @@ func authenticateUserPass(conn net.Conn) error {
 		return fmt.Errorf("read username: %w", err)
 	}
 
-	// PLEN
 	pLenBuf := make([]byte, 1)
 	if _, err := io.ReadFull(conn, pLenBuf); err != nil {
 		return fmt.Errorf("read password length: %w", err)
@@ -168,17 +162,17 @@ func authenticateUserPass(conn net.Conn) error {
 		return nil
 	}
 
-	// Reject invalid credentials.
 	if _, err := conn.Write([]byte{authVersion, authFailure}); err != nil {
 		return fmt.Errorf("write auth failure: %w", err)
 	}
 	return fmt.Errorf("invalid credentials for user %q", string(username))
 }
 
-// handleConnect reads the CONNECT request, dials the target, sends the reply,
-// and returns the connection to the target on success.
+
+
+
+
 func handleConnect(conn net.Conn) (net.Conn, error) {
-	// VER, CMD, RSV, ATYP
 	header := make([]byte, 4)
 	if _, err := io.ReadFull(conn, header); err != nil {
 		return nil, fmt.Errorf("read request header: %w", err)
@@ -223,7 +217,6 @@ func handleConnect(conn net.Conn) (net.Conn, error) {
 		return nil, fmt.Errorf("unsupported address type: %d", atyp)
 	}
 
-	// PORT (big-endian uint16)
 	portBuf := make([]byte, 2)
 	if _, err := io.ReadFull(conn, portBuf); err != nil {
 		return nil, fmt.Errorf("read port: %w", err)
@@ -243,21 +236,24 @@ func handleConnect(conn net.Conn) (net.Conn, error) {
 	return target, nil
 }
 
-// sendReply writes a SOCKS5 reply with the given REP code. BND.ADDR/BND.PORT
-// are reported as IPv4 0.0.0.0:0, which is acceptable for CONNECT.
+
+
+
+
 func sendReply(conn net.Conn, rep byte) error {
 	reply := []byte{
 		socksVersion, rep, 0x00, atypIPv4,
-		0x00, 0x00, 0x00, 0x00, // BND.ADDR = 0.0.0.0
-		0x00, 0x00, // BND.PORT = 0
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
 	}
 	_, err := conn.Write(reply)
 	return err
 }
 
-// relay copies data in both directions between client and target until either
-// side closes. CloseWrite signals EOF on the half that finished so the peer's
-// read returns and HTTP responses terminate cleanly.
+
+
+
+
+
 func relay(client, target net.Conn) {
 	done := make(chan struct{}, 2)
 
